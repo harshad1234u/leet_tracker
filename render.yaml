@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: leethabit
+    env: node
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /login
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.0
+      - key: POSTGRES_URL
+        sync: false
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      - key: APP_URL
+        sync: false
+      - key: META_WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: META_WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: META_WHATSAPP_BUSINESS_ACCOUNT_ID
+        sync: false
+      - key: META_WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: META_WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_TEMPLATE_NAME
+        value: leetcode_reminder
+      - key: WHATSAPP_TEMPLATE_LANGUAGE
+        value: en_US
+  - type: cron
+    name: leethabit-reminders
+    schedule: "*/5 * * * *"
+    buildCommand: "true"
+    startCommand: "curl -fsS -H 'Authorization: Bearer $CRON_SECRET' $APP_URL/api/cron/reminders"
+    envVars:
+      - fromService:
+          name: leethabit
+          type: web
+          envVarKey: CRON_SECRET
+        key: CRON_SECRET
+      - fromService:
+          name: leethabit
+          type: web
+          envVarKey: APP_URL
+        key: APP_URL
