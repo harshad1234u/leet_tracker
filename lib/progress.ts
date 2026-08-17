@@ -21,7 +21,27 @@ export async function settingsFor(userId: string) {
     template_language: string;
   }[]>`SELECT enabled, timezone, start_time, interval_minutes, cutoff_time, phone_number, template_name, template_language FROM reminder_settings WHERE user_id = ${userId}`;
 
-  if (!setting) throw new Error("Settings not found");
+  if (!setting) {
+    const templateName = process.env.WHATSAPP_TEMPLATE_NAME || "leetcode_reminder";
+    const templateLang = process.env.WHATSAPP_TEMPLATE_LANGUAGE || "en_US";
+    const updated = now();
+    try {
+      await sql`INSERT INTO reminder_settings (user_id, template_name, template_language, updated_at) VALUES (${userId}, ${templateName}, ${templateLang}, ${updated}) ON CONFLICT DO NOTHING`;
+      await sql`INSERT INTO whatsapp_connections (user_id, status, updated_at) VALUES (${userId}, 'Mock', ${updated}) ON CONFLICT DO NOTHING`;
+    } catch (e) {
+      console.error("Auto provision settings error:", e);
+    }
+    return {
+      enabled: 1,
+      timezone: "UTC",
+      start_time: "17:00",
+      interval_minutes: 60,
+      cutoff_time: "22:00",
+      phone_number: null,
+      template_name: templateName,
+      template_language: templateLang,
+    };
+  }
   return {
     ...setting,
     enabled: setting.enabled ? 1 : 0,
