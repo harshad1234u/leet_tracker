@@ -1,4 +1,10 @@
+import dns from "node:dns";
+import net from "node:net";
 import postgres from "postgres";
+
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder("ipv4first");
+}
 
 const SUPABASE_FALLBACK_URL =
   "postgresql://postgres:Qscfthnjilp@db.oaimmnyvmgaqnsyxywhq.supabase.co:5432/postgres";
@@ -447,7 +453,10 @@ export const sql =
         max: 10,
         idle_timeout: 20,
         connect_timeout: 10,
-        family: 4,
+        connect: (options: any, cb: any) => {
+          options.family = 4;
+          return net.connect(options, cb);
+        },
       } as any)
     : createMockSql());
 
