@@ -1,7 +1,14 @@
 import postgres from "postgres";
 
+const SUPABASE_FALLBACK_URL =
+  "postgresql://postgres:Qscfthnjilp@db.oaimmnyvmgaqnsyxywhq.supabase.co:5432/postgres";
+
 const connectionString =
-  process.env.POSTGRES_URL || process.env.SUPABASE_DB_URL;
+  process.env.NODE_ENV === "test"
+    ? undefined
+    : (process.env.POSTGRES_URL ||
+       process.env.SUPABASE_DB_URL ||
+       SUPABASE_FALLBACK_URL);
 
 const globalForDb = globalThis as unknown as {
   sql: any;
@@ -448,3 +455,21 @@ if (process.env.NODE_ENV !== "production") globalForDb.sql = sql;
 export const db = sql;
 export const now = () => new Date().toISOString();
 export const id = () => crypto.randomUUID();
+
+let tablesInitialized = false;
+export async function ensureTablesExist() {
+  if (tablesInitialized || !connectionString) return;
+  try {
+    await sql`CREATE TABLE IF NOT EXISTS users (id UUID PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL)`;
+    await sql`CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user_id UUID NOT NULL, expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL)`;
+    await sql`CREATE TABLE IF NOT EXISTS daily_progress (id UUID PRIMARY KEY, user_id UUID NOT NULL, local_date DATE NOT NULL, completed_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL)`;
+    await sql`CREATE TABLE IF NOT EXISTS solved_problems (id UUID PRIMARY KEY, user_id UUID NOT NULL, progress_id UUID NOT NULL, name TEXT NOT NULL, problem_number INT NOT NULL, difficulty TEXT NOT NULL, leetcode_url TEXT NOT NULL, solved_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL)`;
+    await sql`CREATE TABLE IF NOT EXISTS reminder_settings (user_id UUID PRIMARY KEY, enabled BOOLEAN NOT NULL DEFAULT true, start_time TEXT NOT NULL DEFAULT '17:00', interval_minutes INT NOT NULL DEFAULT 60, cutoff_time TEXT NOT NULL DEFAULT '22:00', timezone TEXT NOT NULL DEFAULT 'UTC', phone_number TEXT, template_name TEXT NOT NULL DEFAULT 'leetcode_reminder', template_language TEXT NOT NULL DEFAULT 'en_US', updated_at TIMESTAMPTZ NOT NULL)`;
+    await sql`CREATE TABLE IF NOT EXISTS reminders (id UUID PRIMARY KEY, user_id UUID NOT NULL, local_date DATE NOT NULL, scheduled_at TIMESTAMPTZ NOT NULL, recipient TEXT NOT NULL, status TEXT NOT NULL, message_index INT DEFAULT 0, created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL, retry_count INT DEFAULT 0, provider_message_id TEXT, attempted_at TIMESTAMPTZ, error_info TEXT)`;
+    await sql`CREATE TABLE IF NOT EXISTS milestone_achievements (id UUID PRIMARY KEY, user_id UUID NOT NULL, milestone_days INT NOT NULL, achieved_at TIMESTAMPTZ NOT NULL, dismissed_at TIMESTAMPTZ)`;
+    await sql`CREATE TABLE IF NOT EXISTS whatsapp_connections (user_id UUID PRIMARY KEY, status TEXT NOT NULL, last_error TEXT, updated_at TIMESTAMPTZ NOT NULL)`;
+    tablesInitialized = true;
+  } catch (e) {
+    console.error("Auto table creation notice:", e);
+  }
+}

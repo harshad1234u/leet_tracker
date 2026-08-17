@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSession, createUser, passwordHash, verifyPassword } from "@/lib/auth";
-import { sql } from "@/lib/db";
+import { sql, ensureTablesExist } from "@/lib/db";
 
 export const runtime = "nodejs";
 const schema = z.object({
@@ -11,6 +11,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
+    await ensureTablesExist();
     const input = schema.parse(await request.json());
     const email = input.email.toLowerCase().trim();
 
@@ -43,8 +44,14 @@ export async function POST(request: Request) {
     return response;
   } catch (error: any) {
     console.error("Login error:", error);
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: "Please enter a valid email address and password." },
+        { status: 400 }
+      );
+    }
     return NextResponse.json(
-      { error: error?.message || String(error), details: String(error?.stack || error) },
+      { error: "An error occurred during login. Please try again." },
       { status: 500 }
     );
   }
