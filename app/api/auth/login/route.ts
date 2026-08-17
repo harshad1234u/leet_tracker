@@ -41,16 +41,10 @@ export async function POST(request: Request) {
       expires: new Date(expires),
     });
     return response;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Login error:", error);
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Please enter a valid email address and password." },
-        { status: 400 }
-      );
-    }
     return NextResponse.json(
-      { error: "An error occurred during login. Please try again." },
+      { error: error?.message || String(error), details: String(error?.stack || error) },
       { status: 500 }
     );
   }
