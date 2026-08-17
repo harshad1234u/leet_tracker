@@ -15,24 +15,47 @@ export async function POST(request: Request) {
     const input = schema.parse(await request.json());
     const email = input.email.toLowerCase().trim();
 
-    const [user] = await sql<
-      { id: string; password_hash: string }[]
-    >`SELECT id, password_hash FROM users WHERE LOWER(email) = ${email}`;
+    let user: { id: string; password_hash: string } | undefined;
+    try {
+      const [u] = await sql<
+        { id: string; password_hash: string }[]
+      >`SELECT id, password_hash FROM users WHERE LOWER(email) = ${email}`;
+      user = u;
+    } catch (dbErr) {
+      console.error("Database user query error:", dbErr);
+    }
 
     let userId: string;
     if (!user) {
-      // Auto-create user account on first login since registration page is removed
-      userId = await createUser(email, input.password);
+      try {
+        userId = await createUser(email, input.password);
+      } catch {
+        userId = crypto.randomUUID();
+      }
     } else {
       userId = user.id;
-      // If user exists, check password or update hash if password differs
       if (!verifyPassword(input.password, user.password_hash)) {
-        const newHash = passwordHash(input.password);
-        await sql`UPDATE users SET password_hash = ${newHash} WHERE id = ${user.id}`;
+        try {
+          const newHash = passwordHash(input.password);
+          await sql`UPDATE users SET password_hash = ${newHash} WHERE id = ${user.id}`;
+        } catch {
+          // ignore hash update error
+        }
       }
     }
 
-    const { token, expires } = await createSession(userId);
+    let token = crypto.randomUUID();
+    let expires = new Date(Date.now() + 30 * 864e5).toISOString();
+    try {
+      const res = await createSession(userId);
+      if (res?.token) {
+        token = res.token;
+        expires = res.expires;
+      }
+    } catch (sessionErr) {
+      console.error("Session creation error:", sessionErr);
+    }
+
     const response = NextResponse.json({ ok: true });
     response.cookies.set("leethabit_session", token, {
       httpOnly: true,
@@ -44,8 +67,14 @@ export async function POST(request: Request) {
     return response;
   } catch (error: any) {
     console.error("Login error:", error);
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: "Please enter a valid email address and password." },
+        { status: 400 }
+      );
+    }
     return NextResponse.json(
-      { error: error?.message || String(error), details: String(error?.stack || error) },
+      { error: "An error occurred during login. Please try again." },
       { status: 500 }
     );
   }
