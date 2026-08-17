@@ -17,10 +17,11 @@ export default function Login() {
         body: JSON.stringify(Object.fromEntries(form)),
       });
       const data = await response.json();
-      setLoading(false);
-      if (!response.ok) return setError(data.error || "Something went wrong");
-      router.push("/dashboard");
-      router.refresh();
+      if (!response.ok) {
+        setLoading(false);
+        return setError(data.error || "Something went wrong");
+      }
+      window.location.href = "/dashboard";
     } catch {
       setLoading(false);
       setError("An unexpected error occurred. Please try again.");

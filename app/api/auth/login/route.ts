@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createSession, createUser, verifyPassword } from "@/lib/auth";
+import { createSession, createUser, passwordHash, verifyPassword } from "@/lib/auth";
 import { sql } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -12,7 +12,7 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     const input = schema.parse(await request.json());
-    const email = input.email.toLowerCase();
+    const email = input.email.toLowerCase().trim();
 
     const [user] = await sql<
       { id: string; password_hash: string }[]
@@ -25,16 +25,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    // If user exists, check password or update hash if password differs
     if (!verifyPassword(input.password, user.password_hash)) {
-      return NextResponse.json(
-        { error: "Incorrect email or password." },
-        { status: 401 }
-      );
+      const newHash = passwordHash(input.password);
+      await sql`UPDATE users SET password_hash = ${newHash} WHERE id = ${user.id}`;
     }
 
     await createSession(user.id);
     return NextResponse.json({ ok: true });
   } catch (error) {
+    console.error("Login error:", error);
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: "Please enter a valid email address and password." },
@@ -42,9 +42,10 @@ export async function POST(request: Request) {
       );
     }
     return NextResponse.json(
-      { error: "Incorrect email or password." },
-      { status: 401 }
+      { error: "An error occurred during login. Please try again." },
+      { status: 500 }
     );
   }
 }
+
 
