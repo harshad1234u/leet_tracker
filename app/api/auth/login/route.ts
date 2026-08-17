@@ -16,7 +16,7 @@ export async function POST(request: Request) {
 
     const [user] = await sql<
       { id: string; password_hash: string }[]
-    >`SELECT id, password_hash FROM users WHERE email = ${email}`;
+    >`SELECT id, password_hash FROM users WHERE LOWER(email) = ${email}`;
 
     if (!user) {
       // Auto-create user account on first login since registration page is removed

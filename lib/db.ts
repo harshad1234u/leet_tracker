@@ -54,10 +54,10 @@ function createMockSql(): any {
       return u ? [u] : [];
     }
 
-    if (normalized.includes("FROM users WHERE email =")) {
-      const emailVal = values[0];
+    if (normalized.includes("FROM users WHERE email =") || normalized.includes("FROM users WHERE lower(email) =") || normalized.includes("FROM users WHERE LOWER(email) =")) {
+      const emailVal = String(values[0] || "").toLowerCase();
       for (const u of store.users.values()) {
-        if (u.email === emailVal) return [u];
+        if (String(u.email || "").toLowerCase() === emailVal) return [u];
       }
       return [];
     }
