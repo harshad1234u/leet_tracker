@@ -50,13 +50,19 @@ export async function createSession(userId: string) {
   const expires = new Date(Date.now() + 30 * 864e5).toISOString();
   const tokenHash = hash(token);
   await sql`INSERT INTO sessions (id, user_id, expires_at, created_at) VALUES (${tokenHash}, ${userId}, ${expires}, ${now()})`;
-  (await cookies()).set(COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    expires: new Date(expires),
-  });
+  try {
+    const c = await cookies();
+    c.set(COOKIE, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      expires: new Date(expires),
+    });
+  } catch {
+    // Ignore cookie store error if called outside mutable request context
+  }
+  return { token, expires };
 }
 
 export async function logout() {

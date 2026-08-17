@@ -18,21 +18,29 @@ export async function POST(request: Request) {
       { id: string; password_hash: string }[]
     >`SELECT id, password_hash FROM users WHERE LOWER(email) = ${email}`;
 
+    let userId: string;
     if (!user) {
       // Auto-create user account on first login since registration page is removed
-      const userId = await createUser(email, input.password);
-      await createSession(userId);
-      return NextResponse.json({ ok: true });
+      userId = await createUser(email, input.password);
+    } else {
+      userId = user.id;
+      // If user exists, check password or update hash if password differs
+      if (!verifyPassword(input.password, user.password_hash)) {
+        const newHash = passwordHash(input.password);
+        await sql`UPDATE users SET password_hash = ${newHash} WHERE id = ${user.id}`;
+      }
     }
 
-    // If user exists, check password or update hash if password differs
-    if (!verifyPassword(input.password, user.password_hash)) {
-      const newHash = passwordHash(input.password);
-      await sql`UPDATE users SET password_hash = ${newHash} WHERE id = ${user.id}`;
-    }
-
-    await createSession(user.id);
-    return NextResponse.json({ ok: true });
+    const { token, expires } = await createSession(userId);
+    const response = NextResponse.json({ ok: true });
+    response.cookies.set("leethabit_session", token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      expires: new Date(expires),
+    });
+    return response;
   } catch (error) {
     console.error("Login error:", error);
     if (error instanceof z.ZodError) {
