@@ -5,7 +5,7 @@ import Link from "next/link";
 type Data = any;
 const milestones: Record<number, string> = { 7: "🔥 One week strong!", 30: "🏆 30 days. You've built a habit.", 60: "⚡ 60 days of consistency.", 100: "💯 100 days. Incredible discipline." };
 export default function Dashboard({ initial, email }: { initial: Data; email: string }) {
-  const [data, setData] = useState<Data>(initial), [showLog, setShowLog] = useState(false), [error, setError] = useState(""), [month, setMonth] = useState(() => new Date(`${initial.stats.today}T12:00:00`));
+  const [data, setData] = useState<Data>(initial), [showLog, setShowLog] = useState(false), [error, setError] = useState(""), [month, setMonth] = useState(() => { const todayStr = initial?.stats?.today || new Date().toISOString().slice(0, 10); const d = new Date(`${todayStr}T12:00:00`); return isNaN(d.getTime()) ? new Date() : d; });
   const completed = Boolean(data.todayProgress?.completed_at);
   async function refresh() { const r = await fetch("/api/dashboard"); if (r.ok) setData(await r.json()); }
   async function log(form: FormData) { setError(""); const r = await fetch("/api/problems", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: form.get("name"), number: form.get("number"), difficulty: form.get("difficulty"), url: form.get("url") }) }); const result = await r.json(); if (!r.ok) return setError(result.error); setShowLog(false); await refresh(); }
