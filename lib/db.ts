@@ -447,7 +447,8 @@ export const sql =
         max: 10,
         idle_timeout: 20,
         connect_timeout: 10,
-      })
+        family: 4,
+      } as any)
     : createMockSql());
 
 if (process.env.NODE_ENV !== "production") globalForDb.sql = sql;
