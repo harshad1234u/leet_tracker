@@ -11,9 +11,22 @@ export const passwordHash = (password: string) => {
 };
 
 export const verifyPassword = (password: string, stored: string) => {
-  const [salt, value] = stored.split(":");
-  const candidate = scryptSync(password, salt, 64).toString("hex");
-  return timingSafeEqual(Buffer.from(value), Buffer.from(candidate));
+  try {
+    if (!stored || typeof stored !== "string" || !stored.includes(":")) {
+      return false;
+    }
+    const [salt, value] = stored.split(":");
+    if (!salt || !value) return false;
+    const candidate = scryptSync(password, salt, 64).toString("hex");
+    const bufValue = Buffer.from(value, "hex");
+    const bufCandidate = Buffer.from(candidate, "hex");
+    if (bufValue.length !== bufCandidate.length) {
+      return false;
+    }
+    return timingSafeEqual(bufValue, bufCandidate);
+  } catch {
+    return false;
+  }
 };
 
 export async function currentUser() {
