@@ -75,6 +75,12 @@ export async function logout() {
 }
 
 export async function createUser(email: string, password: string) {
+  const lowerEmail = email.toLowerCase().trim();
+  const [existing] = await sql<{ id: string }[]>`SELECT id FROM users WHERE LOWER(email) = ${lowerEmail}`;
+  if (existing) {
+    return existing.id;
+  }
+
   const userId = id();
   const created = now();
   const pwdHash = passwordHash(password);
@@ -82,9 +88,9 @@ export async function createUser(email: string, password: string) {
   const templateLang = process.env.WHATSAPP_TEMPLATE_LANGUAGE || "en_US";
 
   await sql.begin(async (transactionSql: any) => {
-    await transactionSql`INSERT INTO users (id, email, password_hash, created_at) VALUES (${userId}, ${email.toLowerCase()}, ${pwdHash}, ${created})`;
-    await transactionSql`INSERT INTO reminder_settings (user_id, template_name, template_language, updated_at) VALUES (${userId}, ${templateName}, ${templateLang}, ${created})`;
-    await transactionSql`INSERT INTO whatsapp_connections (user_id, status, updated_at) VALUES (${userId}, 'Mock', ${created})`;
+    await transactionSql`INSERT INTO users (id, email, password_hash, created_at) VALUES (${userId}, ${lowerEmail}, ${pwdHash}, ${created}) ON CONFLICT DO NOTHING`;
+    await transactionSql`INSERT INTO reminder_settings (user_id, template_name, template_language, updated_at) VALUES (${userId}, ${templateName}, ${templateLang}, ${created}) ON CONFLICT DO NOTHING`;
+    await transactionSql`INSERT INTO whatsapp_connections (user_id, status, updated_at) VALUES (${userId}, 'Mock', ${created}) ON CONFLICT DO NOTHING`;
   });
 
   return userId;
