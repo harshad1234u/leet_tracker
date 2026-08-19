@@ -440,25 +440,86 @@ function createMockSql(): any {
   return mockFn;
 }
 
+const realSql = connectionString
+  ? postgres(connectionString, {
+      ssl:
+        process.env.NODE_ENV === "production" ||
+        connectionString.includes("sslmode=require") ||
+        connectionString.includes("supabase.co")
+          ? { rejectUnauthorized: false }
+          : false,
+      max: 10,
+      idle_timeout: 20,
+      connect_timeout: 10,
+      connect: (options: any, cb: any) => {
+        options.family = 4;
+        return net.connect(options, cb);
+      },
+    } as any)
+  : createMockSql();
+
+const mockSql = createMockSql();
+let useMockFallback = false;
+
+function createSafeSqlProxy(targetSql: any) {
+  const handler: ProxyHandler<any> = {
+    apply(target, thisArg, argArray) {
+      if (useMockFallback) {
+        return Reflect.apply(mockSql, thisArg, argArray);
+      }
+      try {
+        const result: any = Reflect.apply(target, thisArg, argArray);
+        if (result && typeof result.then === "function") {
+          return result.catch((err: any) => {
+            if (err && (err.code === "ENETUNREACH" || err.code === "ECONNREFUSED" || /ENETUNREACH|unreachable|EHOSTUNREACH/i.test(String(err?.message || err)))) {
+              console.warn("⚠️ Network unreachable (ENETUNREACH). Falling back to in-memory store.");
+              useMockFallback = true;
+              return Reflect.apply(mockSql, thisArg, argArray);
+            }
+            throw err;
+          });
+        }
+        return result;
+      } catch (err: any) {
+        if (err && (err.code === "ENETUNREACH" || err.code === "ECONNREFUSED" || /ENETUNREACH|unreachable|EHOSTUNREACH/i.test(String(err?.message || err)))) {
+          console.warn("⚠️ Network unreachable (ENETUNREACH). Falling back to in-memory store.");
+          useMockFallback = true;
+          return Reflect.apply(mockSql, thisArg, argArray);
+        }
+        throw err;
+      }
+    },
+    get(target, prop, receiver) {
+      if (prop === "begin") {
+        return async (cb: (tx: any) => Promise<any>) => {
+          if (useMockFallback) {
+            return mockSql.begin(cb);
+          }
+          try {
+            return await targetSql.begin(cb);
+          } catch (err: any) {
+            if (err && (err.code === "ENETUNREACH" || err.code === "ECONNREFUSED" || /ENETUNREACH|unreachable|EHOSTUNREACH/i.test(String(err?.message || err)))) {
+              console.warn("⚠️ Transaction network error (ENETUNREACH). Falling back to in-memory store.");
+              useMockFallback = true;
+              return mockSql.begin(cb);
+            }
+            throw err;
+          }
+        };
+      }
+      if (useMockFallback) {
+        return Reflect.get(mockSql, prop, receiver);
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  };
+
+  return new Proxy(targetSql, handler);
+}
+
 export const sql =
   globalForDb.sql ??
-  (connectionString
-    ? postgres(connectionString, {
-        ssl:
-          process.env.NODE_ENV === "production" ||
-          connectionString.includes("sslmode=require") ||
-          connectionString.includes("supabase.co")
-            ? { rejectUnauthorized: false }
-            : false,
-        max: 10,
-        idle_timeout: 20,
-        connect_timeout: 10,
-        connect: (options: any, cb: any) => {
-          options.family = 4;
-          return net.connect(options, cb);
-        },
-      } as any)
-    : createMockSql());
+  (connectionString ? createSafeSqlProxy(realSql) : mockSql);
 
 if (process.env.NODE_ENV !== "production") globalForDb.sql = sql;
 
