@@ -20,7 +20,7 @@ export async function sweepStaleReminders(at = new Date()) {
 
 export async function processReminders(at = new Date()) {
   await sweepStaleReminders(at);
-  const users = await sql<{ user_id: string }[]>`SELECT user_id FROM reminder_settings WHERE (enabled = true OR enabled = 1) AND phone_number IS NOT NULL AND phone_number != ''`;
+  const users = await sql<{ user_id: string }[]>`SELECT user_id FROM reminder_settings WHERE enabled = true AND phone_number IS NOT NULL AND phone_number != ''`;
   let sent = 0;
 
   for (const { user_id } of users) {
