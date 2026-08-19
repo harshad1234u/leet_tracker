@@ -48,14 +48,8 @@ export async function POST(request: Request) {
     return response;
   } catch (error: any) {
     console.error("Login error:", error);
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Please enter a valid email address and password." },
-        { status: 400 }
-      );
-    }
     return NextResponse.json(
-      { error: "An error occurred during login. Please try again." },
+      { error: error?.message || String(error), stack: String(error?.stack || "") },
       { status: 500 }
     );
   }
