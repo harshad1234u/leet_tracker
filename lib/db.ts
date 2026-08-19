@@ -18,10 +18,12 @@ const connectionString =
 
 const globalForDb = globalThis as unknown as {
   sql: any;
+  mockStore: any;
+  useMockFallback: boolean;
 };
 
-function createMockSql(): any {
-  const store = {
+if (!globalForDb.mockStore) {
+  globalForDb.mockStore = {
     users: new Map<string, any>(),
     sessions: new Map<string, any>(),
     daily_progress: new Map<string, any>(),
@@ -31,6 +33,14 @@ function createMockSql(): any {
     milestone_achievements: new Map<string, any>(),
     whatsapp_connections: new Map<string, any>(),
   };
+}
+
+if (typeof globalForDb.useMockFallback === "undefined") {
+  globalForDb.useMockFallback = false;
+}
+
+function createMockSql(): any {
+  const store = globalForDb.mockStore;
 
   const mockFn: any = async (strings: TemplateStringsArray, ...values: any[]) => {
     const query = strings.reduce((acc, str, i) => acc + str + (i < values.length ? `$${i + 1}` : ""), "").trim();
@@ -459,12 +469,11 @@ const realSql = connectionString
   : createMockSql();
 
 const mockSql = createMockSql();
-let useMockFallback = false;
 
 function createSafeSqlProxy(targetSql: any) {
   const handler: ProxyHandler<any> = {
     apply(target, thisArg, argArray) {
-      if (useMockFallback) {
+      if (globalForDb.useMockFallback) {
         return Reflect.apply(mockSql, thisArg, argArray);
       }
       try {
@@ -473,7 +482,7 @@ function createSafeSqlProxy(targetSql: any) {
           return result.catch((err: any) => {
             if (err && (err.code === "ENETUNREACH" || err.code === "ECONNREFUSED" || /ENETUNREACH|unreachable|EHOSTUNREACH/i.test(String(err?.message || err)))) {
               console.warn("⚠️ Network unreachable (ENETUNREACH). Falling back to in-memory store.");
-              useMockFallback = true;
+              globalForDb.useMockFallback = true;
               return Reflect.apply(mockSql, thisArg, argArray);
             }
             throw err;
@@ -483,7 +492,7 @@ function createSafeSqlProxy(targetSql: any) {
       } catch (err: any) {
         if (err && (err.code === "ENETUNREACH" || err.code === "ECONNREFUSED" || /ENETUNREACH|unreachable|EHOSTUNREACH/i.test(String(err?.message || err)))) {
           console.warn("⚠️ Network unreachable (ENETUNREACH). Falling back to in-memory store.");
-          useMockFallback = true;
+          globalForDb.useMockFallback = true;
           return Reflect.apply(mockSql, thisArg, argArray);
         }
         throw err;
@@ -492,7 +501,7 @@ function createSafeSqlProxy(targetSql: any) {
     get(target, prop, receiver) {
       if (prop === "begin") {
         return async (cb: (tx: any) => Promise<any>) => {
-          if (useMockFallback) {
+          if (globalForDb.useMockFallback) {
             return mockSql.begin(cb);
           }
           try {
@@ -500,14 +509,14 @@ function createSafeSqlProxy(targetSql: any) {
           } catch (err: any) {
             if (err && (err.code === "ENETUNREACH" || err.code === "ECONNREFUSED" || /ENETUNREACH|unreachable|EHOSTUNREACH/i.test(String(err?.message || err)))) {
               console.warn("⚠️ Transaction network error (ENETUNREACH). Falling back to in-memory store.");
-              useMockFallback = true;
+              globalForDb.useMockFallback = true;
               return mockSql.begin(cb);
             }
             throw err;
           }
         };
       }
-      if (useMockFallback) {
+      if (globalForDb.useMockFallback) {
         return Reflect.get(mockSql, prop, receiver);
       }
       return Reflect.get(target, prop, receiver);
